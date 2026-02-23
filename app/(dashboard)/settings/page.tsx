@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { PROVIDER_INFO, type AIProvider } from "@/lib/ai-service";
+import { apiFetch } from "@/lib/api-client";
+import { useErrorModal } from "@/components/error-modal";
 
 interface AzureConfig {
   id: string;
@@ -44,6 +46,7 @@ interface AzureConfig {
 }
 
 export default function SettingsPage() {
+  const { showError, showApiError } = useErrorModal();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -58,9 +61,8 @@ export default function SettingsPage() {
 
   // Load existing config
   useEffect(() => {
-    fetch("/api/azure/config")
-      .then((res) => res.json())
-      .then((data: AzureConfig | null) => {
+    apiFetch<AzureConfig | null>("/api/azure/config")
+      .then((data) => {
         if (data) {
           setOrganization(data.organization);
           setPat(data.pat);
@@ -70,9 +72,9 @@ export default function SettingsPage() {
           setAiApiKey(data.aiApiKey || "");
         }
       })
-      .catch(() => {})
+      .catch((err) => showApiError(err, "Failed to load settings"))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [showApiError]);
 
   // Update model when provider changes
   useEffect(() => {
@@ -96,17 +98,25 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (!organization || !pat) {
-      toast.error("Organization and PAT are required");
+      showError({
+        title: "Validation Error",
+        message: "Organization and PAT are required fields.",
+        type: "generic",
+      });
       return;
     }
     if (aliases.length === 0) {
-      toast.error("Add at least one username alias");
+      showError({
+        title: "Validation Error",
+        message: "Add at least one username alias so we can identify your commits.",
+        type: "generic",
+      });
       return;
     }
 
     setIsSaving(true);
     try {
-      const res = await fetch("/api/azure/config", {
+      await apiFetch("/api/azure/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -118,16 +128,9 @@ export default function SettingsPage() {
           aiApiKey: aiApiKey || undefined,
         }),
       });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to save");
-      }
-
       toast.success("Configuration saved successfully!");
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to save";
-      toast.error(message);
+    } catch (err) {
+      showApiError(err, "Failed to save configuration");
     } finally {
       setIsSaving(false);
     }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
-import { generateBragDoc, type AIProviderConfig } from "@/lib/ai-service";
+import { generateBragDoc, type AIProviderConfig, type BragDocMode } from "@/lib/ai-service";
 import { z } from "zod";
 
 // GET /api/brag-docs - List all brag docs for the user
@@ -22,6 +22,7 @@ const generateSchema = z.object({
   title: z.string().min(1, "Title is required"),
   periodStart: z.string().min(1, "Start date is required"),
   periodEnd: z.string().min(1, "End date is required"),
+  mode: z.enum(["detailed", "summary"]).default("detailed"),
 });
 
 export async function POST(req: NextRequest) {
@@ -85,7 +86,8 @@ export async function POST(req: NextRequest) {
       aiConfig,
       allCommits,
       input.periodStart,
-      input.periodEnd
+      input.periodEnd,
+      input.mode as BragDocMode
     );
 
     // Save

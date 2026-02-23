@@ -9,6 +9,7 @@ import {
   Settings,
   LogOut,
   Lightbulb,
+  MessageCircle,
   User,
   Zap,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
+  { icon: MessageCircle, label: "Ask AI", href: "/chat" },
   { icon: Lightbulb, label: "Daily Insights", href: "/daily" },
   { icon: FileText, label: "Brag Documents", href: "/brag-docs" },
   { icon: Settings, label: "Settings", href: "/settings" },
@@ -94,7 +96,7 @@ export function SidebarNav() {
       <div className="p-3 border-t border-border/50">
         <Button
           variant="ghost"
-          className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-3"
+          className="w-full justify-start text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-3 cursor-pointer"
           onClick={() => signOut({ callbackUrl: "/login" })}
         >
           <LogOut className="w-4 h-4" />

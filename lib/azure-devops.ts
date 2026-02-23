@@ -111,6 +111,56 @@ export async function fetchCommitsForRepo(
 }
 
 // ============================================
+// Commit Changes (file-level diff)
+// ============================================
+
+interface AzureCommitChange {
+  item: {
+    objectId: string;
+    originalObjectId?: string;
+    gitObjectType: string;
+    commitId: string;
+    path: string;
+    url: string;
+  };
+  changeType:
+    | "add"
+    | "edit"
+    | "delete"
+    | "rename"
+    | "sourceRename"
+    | "targetRename"
+    | "all";
+}
+
+interface AzureCommitChangesResponse {
+  changeCounts: Record<string, number>;
+  changes: AzureCommitChange[];
+}
+
+export interface CommitFileChange {
+  path: string;
+  changeType: string;
+}
+
+export async function fetchCommitChanges(
+  organization: string,
+  projectName: string,
+  repoId: string,
+  commitId: string,
+  pat: string
+): Promise<CommitFileChange[]> {
+  const url = `https://dev.azure.com/${encodeURIComponent(organization)}/${encodeURIComponent(projectName)}/_apis/git/repositories/${repoId}/commits/${commitId}/changes?api-version=${API_VERSION}`;
+  const data = await fetchAzure<AzureCommitChangesResponse>(url, pat);
+  return data.changes
+    .filter((c) => c.item.gitObjectType === "blob")
+    .map((c) => ({
+      path: c.item.path,
+      changeType: c.changeType,
+    }));
+}
+
+// ============================================
 // Multi-Username Commit Filtering
 // ============================================
 
