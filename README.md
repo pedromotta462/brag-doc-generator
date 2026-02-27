@@ -45,7 +45,7 @@ A Next.js application that connects to Azure DevOps, syncs your commits across a
 |-------|-----------|
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript |
-| Auth | NextAuth.js v5 (GitHub OAuth) |
+| Auth | NextAuth.js v5 (GitHub + Google OAuth) |
 | Database | PostgreSQL via Prisma ORM 5 |
 | AI | Vercel AI SDK with OpenAI, Anthropic, Google Gemini, DeepSeek |
 | Styling | Tailwind CSS 4 + shadcn/ui |
@@ -64,12 +64,14 @@ brag-doc-generator/
 │   │   ├── chat/page.tsx     # AI chat about commits
 │   │   ├── settings/page.tsx # Azure DevOps & AI configuration
 │   │   └── layout.tsx        # Auth guard + sidebar layout
-│   ├── login/page.tsx        # GitHub sign-in page
+│   ├── login/page.tsx        # GitHub & Google sign-in page
 │   ├── api/
 │   │   ├── auth/[...nextauth]/ # NextAuth handler
 │   │   ├── azure/
 │   │   │   ├── config/       # GET/POST Azure DevOps config
 │   │   │   └── sync/         # POST sync commits from Azure
+│   │   ├── cron/
+│   │   │   └── sync/         # GET scheduled sync (CRON_SECRET protected)
 │   │   ├── projects/         # GET synced projects
 │   │   ├── stats/
 │   │   │   ├── route.ts      # GET aggregated metrics
@@ -90,11 +92,15 @@ brag-doc-generator/
 │   └── ui/                   # shadcn/ui components
 ├── lib/
 │   ├── prisma.ts             # Prisma client singleton
-│   ├── auth.ts               # NextAuth config (GitHub + Prisma adapter)
+│   ├── auth.ts               # NextAuth config (GitHub + Google + Prisma adapter)
 │   ├── auth-helpers.ts       # Auth utilities for API routes
 │   ├── ai-service.ts         # Multi-provider AI service
 │   ├── azure-devops.ts       # Azure DevOps REST API client
 │   ├── api-client.ts         # Typed fetch wrapper with error handling
+│   ├── encryption.ts         # AES-256-GCM encrypt/decrypt for secrets
+│   ├── config-helpers.ts     # Decrypted config helper
+│   ├── sync-service.ts       # Shared sync logic (manual + cron)
+│   ├── logger.ts             # Structured backend logger
 │   └── utils.ts              # Class name utilities
 ├── prisma/
 │   └── schema.prisma         # Database schema
@@ -122,7 +128,7 @@ brag-doc-generator/
 | Provider | Models | Free Tier |
 |----------|--------|-----------|
 | DeepSeek | DeepSeek-V3 (Chat), DeepSeek-R1 (Reasoner) | Yes (balance-based) |
-| Google Gemini | Gemini 2.5 Flash, 2.0 Flash, 1.5 Flash | Yes |
+| Google Gemini | Gemini 3.1 Pro, 3 Flash, 2.5 Pro, 2.5 Flash, 2.0 Flash, 1.5 Flash | Yes (2.5 Flash) |
 | OpenAI | GPT-4o Mini, GPT-4o, GPT-4.1 Mini, GPT-4.1 | No |
 | Claude (Anthropic) | Claude Sonnet 4, Claude Haiku 4 | No |
 

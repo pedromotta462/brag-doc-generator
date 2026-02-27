@@ -46,6 +46,10 @@ export const PROVIDER_INFO: Record<
     models: [
       { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Free)" },
       { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+      { value: "gemini-3-flash", label: "Gemini 3 Flash" },
+      { value: "gemini-3-flash-preview", label: "Gemini 3 Flash (Preview)" },
+      { value: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
+      { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro (Preview)" },
       { value: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
       { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
     ],

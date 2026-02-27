@@ -38,7 +38,7 @@ export function encrypt(plaintext: string): string {
  * Decrypts a string. If the value does not start with "enc:", returns as-is (legacy unencrypted).
  */
 export function decrypt(value: string | null | undefined): string {
-  if (value == null || value === "") return value;
+  if (value == null || value === "") return "";
   if (!value.startsWith(PREFIX)) return value; // legacy unencrypted
   try {
     const key = getKey();
