@@ -51,7 +51,7 @@ export default function DailyInsightsPage() {
       const data = await apiFetch<{ weekDays: WeekDay[] }>("/api/insights");
       setWeekDays(data.weekDays);
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = format(new Date(), "yyyy-MM-dd");
       const daysWithCommits = data.weekDays.filter((d) => d.hasCommits);
 
       if (daysWithCommits.length > 0) {
@@ -123,7 +123,7 @@ export default function DailyInsightsPage() {
   };
 
   const isToday = (date: string) =>
-    date === new Date().toISOString().split("T")[0];
+    date === format(new Date(), "yyyy-MM-dd");
 
   if (weekLoading) {
     return (

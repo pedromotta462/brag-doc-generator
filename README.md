@@ -46,7 +46,7 @@ A Next.js application that connects to Azure DevOps, syncs your commits across a
 | Framework | Next.js 16 (App Router, Turbopack) |
 | Language | TypeScript |
 | Auth | NextAuth.js v5 (GitHub OAuth) |
-| Database | SQLite via Prisma ORM 5 |
+| Database | PostgreSQL via Prisma ORM 5 |
 | AI | Vercel AI SDK with OpenAI, Anthropic, Google Gemini, DeepSeek |
 | Styling | Tailwind CSS 4 + shadcn/ui |
 | Charts | Recharts |
@@ -147,12 +147,22 @@ npm install
 Create a `.env` file:
 
 ```env
-DATABASE_URL="file:./prisma/dev.db"
+# PostgreSQL - create a database at Neon, Supabase, Vercel Postgres, or Railway
+DATABASE_URL="postgresql://user:password@host:5432/database?schema=public"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-random-secret-here"
+ENCRYPTION_KEY="optional-32-char-secret-for-encryption"
 GITHUB_CLIENT_ID="your-github-oauth-client-id"
 GITHUB_CLIENT_SECRET="your-github-oauth-client-secret"
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+CRON_SECRET="your-cron-secret-for-scheduled-sync"
 ```
+
+- **ENCRYPTION_KEY** (optional): Used to encrypt PAT and AI API keys in the database. If omitted, `NEXTAUTH_SECRET` is used. For production, prefer a dedicated 32+ character secret.
+- **GOOGLE_CLIENT_ID** / **GOOGLE_CLIENT_SECRET** (optional): Enable Google sign-in. If omitted, only GitHub login is available.
+- **CRON_SECRET** (optional): Secret for the scheduled Azure sync cron. Required on Vercel for automatic daily sync at 1 AM (Brazil time). Generate with `openssl rand -hex 32`.
+- **DEBUG_LOGS** (optional): Set to `"true"` for verbose backend logs (auth failures, cache hits, etc.). Never logs secrets or tokens.
 
 #### GitHub OAuth Setup
 
@@ -162,12 +172,24 @@ GITHUB_CLIENT_SECRET="your-github-oauth-client-secret"
 4. Set **Authorization callback URL** to `http://localhost:3000/api/auth/callback/github`
 5. Copy the Client ID and Client Secret to `.env`
 
+#### Google OAuth Setup
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a project or select an existing one
+3. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID**
+4. Choose **Web application**, add **Authorized redirect URI**: `http://localhost:3000/api/auth/callback/google`
+5. Copy the Client ID and Client Secret to `.env`
+
 ### 3. Initialize the database
 
+Create a PostgreSQL database (free tiers: [Neon](https://neon.tech), [Supabase](https://supabase.com), [Vercel Postgres](https://vercel.com/storage/postgres)), then:
+
 ```bash
-npx prisma db push
+npx prisma migrate deploy
 npx prisma generate
 ```
+
+For local development with a fresh DB, use `npx prisma migrate dev` instead of `migrate deploy`.
 
 ### 4. Start the development server
 
@@ -175,7 +197,7 @@ npx prisma generate
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub.
+Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub or Google.
 
 ### 5. Configure the app
 
@@ -185,10 +207,24 @@ Open [http://localhost:3000](http://localhost:3000) and sign in with GitHub.
 4. Select an **AI provider** and enter the API key
 5. Click **Save**, then go to **Dashboard** and click **Sync Now**
 
+#### Scheduled Sync (Cron)
+
+A cron job runs **daily at 1 AM (Brazil time)** to sync Azure DevOps data for all users. On **Vercel**, add `CRON_SECRET` to your environment variables — Vercel will automatically invoke `/api/cron/sync` with the correct auth header.
+
+For **self-hosted** deployments, use an external cron (e.g. [cron-job.org](https://cron-job.org), GitHub Actions, or system cron) to call:
+
+```
+GET https://your-domain.com/api/cron/sync
+Authorization: Bearer <CRON_SECRET>
+```
+
+Or use the header: `x-cron-secret: <CRON_SECRET>`.
+
 ## How It Works
 
-1. **Sync**: The app fetches all projects and repositories from your Azure DevOps organization, then pulls commits filtered by your user aliases
+1. **Sync**: The app fetches all projects and repositories from your Azure DevOps organization, then pulls commits filtered by your user aliases. Manual sync via Dashboard or scheduled daily at 1 AM
 2. **Dashboard**: Aggregated metrics and charts are computed server-side from the synced commit data
 3. **AI Features**: When you generate a brag doc, request daily insights, or ask a question in the chat, the app sends your commit data to the configured AI provider with carefully crafted prompts
 4. **Caching**: Daily insights and repository summaries are cached in the database to avoid redundant AI calls — they're generated once and reused on subsequent page loads
 5. **PDF Export**: Uses the browser's native print-to-PDF with a styled HTML template that matches the in-app document view
+6. **Encryption**: PAT and AI API keys are encrypted with AES-256-GCM before being stored in the database. The encryption key is derived from `ENCRYPTION_KEY` or `NEXTAUTH_SECRET`

@@ -2,6 +2,8 @@
 // Azure DevOps API Service
 // ============================================
 
+import { log } from "./logger";
+
 const API_VERSION = "7.0";
 
 interface AzureProject {
@@ -242,15 +244,20 @@ export async function syncAllCommits(
 
           projectCommits = [...projectCommits, ...userCommits];
         } catch (err) {
-          // Some repos might be empty or inaccessible, skip them
-          console.warn(
-            `Failed to fetch commits for repo ${repo.name} in ${project.name}:`,
-            err
-          );
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          log.warn("Azure", "Failed to fetch repo commits", {
+            project: project.name,
+            repo: repo.name,
+            error: msg,
+          });
         }
       }
     } catch (err) {
-      console.warn(`Failed to fetch repos for project ${project.name}:`, err);
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      log.warn("Azure", "Failed to fetch project repos", {
+        project: project.name,
+        error: msg,
+      });
     }
 
     if (projectCommits.length > 0) {

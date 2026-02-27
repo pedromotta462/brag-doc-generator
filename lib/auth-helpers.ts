@@ -1,5 +1,6 @@
 import { auth } from "./auth";
 import { NextResponse } from "next/server";
+import { log } from "./logger";
 
 /**
  * Get the authenticated user's ID from the session.
@@ -18,6 +19,7 @@ export async function requireAuth(): Promise<
 > {
   const userId = await getAuthUserId();
   if (!userId) {
+    log.debug("Auth", "Unauthorized request", { path: "api" });
     return {
       error: NextResponse.json({ message: "Unauthorized" }, { status: 401 }),
     };

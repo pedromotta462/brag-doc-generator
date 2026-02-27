@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
+import { getDecryptedConfig } from "@/lib/config-helpers";
 import { generateBragDoc, type AIProviderConfig, type BragDocMode } from "@/lib/ai-service";
+import { log } from "@/lib/logger";
 import { z } from "zod";
 
 // GET /api/brag-docs - List all brag docs for the user
@@ -19,9 +21,9 @@ export async function GET() {
 
 // POST /api/brag-docs - Generate a new brag doc
 const generateSchema = z.object({
-  title: z.string().min(1, "Title is required"),
-  periodStart: z.string().min(1, "Start date is required"),
-  periodEnd: z.string().min(1, "End date is required"),
+  title: z.string().min(1, "Title is required").max(200),
+  periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid start date (use YYYY-MM-DD)"),
+  periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid end date (use YYYY-MM-DD)"),
   mode: z.enum(["detailed", "summary"]).default("detailed"),
 });
 
@@ -35,10 +37,16 @@ export async function POST(req: NextRequest) {
 
     const userId = authResult.userId;
 
-    // Get AI config
-    const config = await prisma.azureConfig.findUnique({
-      where: { userId },
+    log.info("BragDoc", "Generation started", {
+      userId,
+      title: input.title,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      mode: input.mode,
     });
+
+    // Get AI config (decrypted)
+    const config = await getDecryptedConfig(userId);
 
     if (!config?.aiApiKey) {
       return NextResponse.json(
@@ -101,6 +109,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    log.info("BragDoc", "Generation complete", {
+      userId: authResult.userId,
+      docId: doc.id,
+      commitCount: allCommits.length,
+    });
+
     return NextResponse.json(doc, { status: 201 });
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -109,7 +123,10 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    console.error("Generate brag doc error:", err);
+    log.error("BragDoc", "Generation failed", {
+      userId: authResult.userId,
+      error: err instanceof Error ? err.message : "Unknown error",
+    });
     return NextResponse.json(
       { message: "Failed to generate brag doc" },
       { status: 500 }

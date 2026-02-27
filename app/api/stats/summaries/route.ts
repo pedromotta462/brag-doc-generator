@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
+import { getDecryptedConfig } from "@/lib/config-helpers";
+import { log } from "@/lib/logger";
 import {
   generateRepoSummaries,
   type RepoCommitsForSummary,
@@ -27,8 +29,9 @@ export async function POST() {
   if (authResult.error) return authResult.error;
   const userId = authResult.userId;
 
-  const config = await prisma.azureConfig.findUnique({ where: { userId } });
+  const config = await getDecryptedConfig(userId);
   if (!config || !config.aiApiKey) {
+    log.warn("Summaries", "No AI config", { userId });
     return NextResponse.json(
       { error: "AI provider not configured. Go to Settings to set it up." },
       { status: 400 }
@@ -57,6 +60,11 @@ export async function POST() {
     repoGroup[repo].messages.push(c.message);
   }
 
+  log.info("Summaries", "Generating repo summaries", {
+    userId,
+    repoCount: Object.keys(repoGroup).length,
+  });
+
   const repos: RepoCommitsForSummary[] = Object.entries(repoGroup).map(
     ([repoName, data]) => ({
       repoName,
@@ -73,6 +81,11 @@ export async function POST() {
     },
     repos
   );
+
+  log.info("Summaries", "Summaries generated", {
+    userId,
+    summaryCount: Object.keys(aiSummaries).length,
+  });
 
   for (const [repoName, summary] of Object.entries(aiSummaries)) {
     const projectName =

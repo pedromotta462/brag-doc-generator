@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
+import { getDecryptedConfig } from "@/lib/config-helpers";
+import { log } from "@/lib/logger";
 import {
   generateChatResponse,
   type AIProviderConfig,
@@ -38,7 +40,7 @@ export async function POST(req: NextRequest) {
 
   const userId = authResult.userId;
 
-  let body: { message: string; conversationId?: string };
+  let body: { message?: string; conversationId?: string };
   try {
     body = await req.json();
   } catch {
@@ -48,14 +50,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!body.message?.trim()) {
+  if (typeof body.message !== "string") {
+    return NextResponse.json(
+      { message: "Message must be a string" },
+      { status: 400 }
+    );
+  }
+
+  const message = body.message.trim();
+  log.debug("Chat", "Message received", {
+    userId,
+    messageLength: message.length,
+    hasConversationId: !!body.conversationId,
+  });
+
+  if (!message) {
     return NextResponse.json(
       { message: "Message is required" },
       { status: 400 }
     );
   }
+  if (message.length > 8000) {
+    return NextResponse.json(
+      { message: "Message too long (max 8000 characters)" },
+      { status: 400 }
+    );
+  }
 
-  const config = await prisma.azureConfig.findUnique({ where: { userId } });
+  const config = await getDecryptedConfig(userId);
   if (!config?.aiApiKey) {
     return NextResponse.json(
       { message: "Please configure your AI provider and API key in Settings." },
@@ -73,9 +95,9 @@ export async function POST(req: NextRequest) {
   let conversationId = body.conversationId;
   if (!conversationId) {
     const title =
-      body.message.length > 60
-        ? body.message.slice(0, 57) + "..."
-        : body.message;
+      message.length > 60
+        ? message.slice(0, 57) + "..."
+        : message;
     const conversation = await prisma.chatConversation.create({
       data: { userId, title },
     });
@@ -94,7 +116,7 @@ export async function POST(req: NextRequest) {
 
   // Save user message
   await prisma.chatMessage.create({
-    data: { conversationId, role: "user", content: body.message },
+    data: { conversationId, role: "user", content: message },
   });
 
   // Load conversation history
@@ -107,7 +129,7 @@ export async function POST(req: NextRequest) {
   // Parse the user question for context cues
   const commits = await gatherCommitContext(
     userId,
-    body.message,
+    message,
     config.organization,
     config.pat
   );
@@ -120,7 +142,7 @@ export async function POST(req: NextRequest) {
 
     const aiResponse = await generateChatResponse(
       aiConfig,
-      body.message,
+      message,
       commits,
       history
     );
@@ -136,13 +158,19 @@ export async function POST(req: NextRequest) {
       data: { updatedAt: new Date() },
     });
 
+    log.info("Chat", "Response generated", {
+      userId,
+      conversationId,
+      responseLength: aiResponse.length,
+    });
+
     return NextResponse.json({
       conversationId,
       response: aiResponse,
     });
   } catch (error: unknown) {
-    console.error("Chat AI error:", error);
     const errorMsg = error instanceof Error ? error.message : "Unknown error";
+    log.error("Chat", "AI response failed", { userId, conversationId, error: errorMsg });
 
     const isQuota =
       errorMsg.includes("quota") ||

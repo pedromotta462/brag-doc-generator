@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/auth-helpers";
+import { getDecryptedConfig } from "@/lib/config-helpers";
+import { log } from "@/lib/logger";
 import {
   generateDailyInsights,
   type AIProviderConfig,
@@ -33,11 +35,18 @@ export async function GET(req: NextRequest) {
   const dateParam = req.nextUrl.searchParams.get("date");
 
   if (dateParam) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      return NextResponse.json(
+        { message: "Invalid date format (use YYYY-MM-DD)" },
+        { status: 400 }
+      );
+    }
     const cached = await prisma.dailyInsight.findUnique({
       where: { userId_date: { userId, date: dateParam } },
     });
 
     if (cached) {
+      log.debug("Insights", "Cache hit", { userId, date: dateParam });
       return NextResponse.json({
         todaysFocus: cached.todaysFocus,
         recentAchievements: JSON.parse(cached.recentAchievements),
@@ -46,6 +55,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    log.debug("Insights", "Cache miss, generating", { userId, date: dateParam });
     return generateAndCache(userId, dateParam);
   }
 
@@ -118,11 +128,10 @@ export async function POST(req: NextRequest) {
 
 async function generateAndCache(userId: string, date: string) {
   try {
-    const config = await prisma.azureConfig.findUnique({
-      where: { userId },
-    });
+    const config = await getDecryptedConfig(userId);
 
     if (!config?.aiApiKey) {
+      log.warn("Insights", "No AI config", { userId });
       return NextResponse.json({
         todaysFocus:
           "Configure your AI provider in Settings to get insights.",
@@ -161,6 +170,12 @@ async function generateAndCache(userId: string, date: string) {
 
     const insights = await generateDailyInsights(aiConfig, dayCommits, date);
 
+    log.info("Insights", "Generated and cached", {
+      userId,
+      date,
+      commitCount: dayCommits.length,
+    });
+
     await prisma.dailyInsight.upsert({
       where: { userId_date: { userId, date } },
       update: {
@@ -182,9 +197,9 @@ async function generateAndCache(userId: string, date: string) {
       cachedAt: new Date(),
     });
   } catch (error: unknown) {
-    console.error("Insights error:", error);
-
     const errorMsg = error instanceof Error ? error.message : "";
+    log.error("Insights", "Generation failed", { userId, date, error: errorMsg });
+
     const isQuota =
       errorMsg.includes("quota") ||
       errorMsg.includes("rate") ||
